@@ -1,3 +1,5 @@
+use patina_engine::run;
+
 fn main() {
-    println!("Hello, world!");
+    run();
 }
