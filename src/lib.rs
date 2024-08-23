@@ -20,6 +20,7 @@ struct State<'a> {
     window: &'a Window,
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
+    swap_render_pipeline: wgpu::RenderPipeline,
 }
 
 impl<'a> State<'a> {
@@ -140,6 +141,52 @@ impl<'a> State<'a> {
             cache: None,
         });
 
+        let shader_challenge = device.create_shader_module(wgpu::ShaderModuleDescriptor { 
+            label: Some("Shader Challenge"), 
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader_challenge.wgsl").into()), 
+        });
+
+        let swap_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Swap Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_challenge,
+                entry_point: "vs_main",
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_challenge,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                polygon_mode: wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
+                unclipped_depth: false,
+                // Requires Features::CONSERVATIVE_RASTERIZATION
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState { 
+                count: 1, 
+                mask: !0, 
+                alpha_to_coverage_enabled: false 
+            },
+            multiview: None,
+            cache: None,
+        });
+
         Self {
             window,
             surface,
@@ -149,6 +196,7 @@ impl<'a> State<'a> {
             size,
             clear_color,
             render_pipeline,
+            swap_render_pipeline,
         }
     }
 
@@ -179,7 +227,18 @@ impl<'a> State<'a> {
                 };
 
                 consumed_input = true;
-            }
+            },
+            // Swap the render pipeline on space press
+            WindowEvent::KeyboardInput { 
+                event: KeyEvent {
+                    state: ElementState::Pressed,
+                    physical_key: PhysicalKey::Code(KeyCode::Space),
+                    ..
+                },
+                ..
+            } => {
+                std::mem::swap(&mut self.render_pipeline, &mut self.swap_render_pipeline);
+            },
             _ => ()
         }
 
