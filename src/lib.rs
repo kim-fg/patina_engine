@@ -1,10 +1,14 @@
 mod texture;
 mod camera;
-
+mod camera_controller;
+mod model_instance;
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
+use camera_controller::CameraController;
+use model_instance::{ModelInstance, ModelInstanceRaw};
 
 use wgpu::util::DeviceExt;
+use cgmath::prelude::*;
 use winit::{
     event::*,
     event_loop::EventLoop,
@@ -73,9 +77,7 @@ struct State<'a> {
     // it gets dropped after it as the surface contains
     // unsafe references to the window's resources.
     window: &'a Window,
-    clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
-    swap_render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
@@ -85,9 +87,15 @@ struct State<'a> {
     camera_uniform: camera::CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    camera_controller: CameraController,
+    model_instances: Vec<ModelInstance>,
+    model_instance_buffer: wgpu::Buffer,
 }
 
 impl<'a> State<'a> {
+    const NUM_MODEL_INSTANCES_PER_ROW: u32 = 10;
+    const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(Self::NUM_MODEL_INSTANCES_PER_ROW as f32 * 0.5, 0.0, Self::NUM_MODEL_INSTANCES_PER_ROW as f32 * 0.5);
+
     // Creating some of the wgpu types requires async code
     async fn new(window: &'a Window) -> State<'a> {
         let size = window.inner_size();
@@ -236,13 +244,6 @@ impl<'a> State<'a> {
             ],
         });
 
-        let clear_color = wgpu::Color {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
-            a: 1.0,
-        };
-
         // alt
         // let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { 
@@ -267,57 +268,12 @@ impl<'a> State<'a> {
                 entry_point: "vs_main",
                 buffers: &[
                     Vertex::descriptor(),
+                    ModelInstanceRaw::descriptor(),
                 ],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState { 
-                count: 1, 
-                mask: !0, 
-                alpha_to_coverage_enabled: false 
-            },
-            multiview: None,
-            cache: None,
-        });
-
-        let shader_challenge = device.create_shader_module(wgpu::ShaderModuleDescriptor { 
-            label: Some("Shader Challenge"), 
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader_challenge.wgsl").into()), 
-        });
-
-        let swap_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Swap Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader_challenge,
-                entry_point: "vs_main",
-                buffers: &[],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader_challenge,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
@@ -366,7 +322,36 @@ impl<'a> State<'a> {
 
         let index_count = INDICES.len() as u32;
 
-        // this is way too much data in one struct lol.. it needs to be split up majorly
+        let camera_controller = CameraController::new(0.2);
+
+        let model_instances = (0..Self::NUM_MODEL_INSTANCES_PER_ROW).flat_map(|z| {
+            (0..Self::NUM_MODEL_INSTANCES_PER_ROW).map(move |x| {
+                let position = cgmath::Vector3 {x: x as f32, y: 0.0, z: z as f32 } - Self::INSTANCE_DISPLACEMENT;
+
+                let rotation = if position.is_zero() {
+                    // this is needed so an object at (0, 0, 0) won't get scaled to zero
+                    // as Quaternions can affect scale if they're not created correctly
+                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                } else {
+                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                };
+
+                ModelInstance {
+                    position, rotation,
+                }
+            })
+        }).collect::<Vec<_>>();
+
+        let instance_data = model_instances.iter().map(ModelInstance::to_raw).collect::<Vec<_>>();
+        let model_instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+
+        // todo! this is way too much data in one struct lol.. it needs to be split up majorly
         Self {
             window,
             surface,
@@ -374,9 +359,7 @@ impl<'a> State<'a> {
             queue,
             config,
             size,
-            clear_color,
             render_pipeline,
-            swap_render_pipeline,
             vertex_buffer,
             index_buffer,
             index_count,
@@ -386,6 +369,9 @@ impl<'a> State<'a> {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            camera_controller,
+            model_instances,
+            model_instance_buffer,
         }
     }
 
@@ -403,39 +389,16 @@ impl<'a> State<'a> {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        let mut consumed_input = false;
-        match event {
-            WindowEvent::CursorMoved{ device_id: _, position } => {
-                let window_width = self.window.inner_size().width as f64;
-                let window_height = self.window.inner_size().height as f64;
-                self.clear_color = wgpu::Color {
-                    r: position.x / window_width,
-                    g: position.y / window_height,
-                    b: (position.x * position.y) / (window_width * window_height),
-                    a: 1.0,
-                };
-
-                consumed_input = true;
-            },
-            // Swap the render pipeline on space press
-            WindowEvent::KeyboardInput { 
-                event: KeyEvent {
-                    state: ElementState::Pressed,
-                    physical_key: PhysicalKey::Code(KeyCode::Space),
-                    ..
-                },
-                ..
-            } => {
-                std::mem::swap(&mut self.render_pipeline, &mut self.swap_render_pipeline);
-            },
-            _ => ()
-        }
-
-        consumed_input
+        self.camera_controller.process_events(event)
     }
 
     fn update(&mut self) {
-        
+        // Make sure that if you add new instances to the Vec, you recreate the instance_buffer as well as camera_bind_group. 
+        // Otherwise, your new instances won't show up correctly.
+
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update_view_proj(&self.camera);
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -451,7 +414,12 @@ impl<'a> State<'a> {
                 view: &view,
                 resolve_target: None,
                 ops: wgpu::Operations { 
-                    load: wgpu::LoadOp::Clear(self.clear_color), 
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
+                    }), 
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -464,9 +432,10 @@ impl<'a> State<'a> {
         render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
         render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, self.model_instance_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         
-        render_pass.draw_indexed(0..self.index_count, 0, 0..1);
+        render_pass.draw_indexed(0..self.index_count, 0, 0..self.model_instances.len() as _);
 
         drop(render_pass); //IMPORTANT: we have to release the borrow before we finish
 
