@@ -136,7 +136,11 @@ pub async fn load_model(
                             model.mesh.positions[i * 3 + 2],
                         ],
                         tex_coords: [model.mesh.texcoords[i * 2], 1.0 - model.mesh.texcoords[i * 2 + 1]],
-                        normal: [0.0, 0.0, 0.0],
+                        normal: [
+                            model.mesh.normals[i * 3 + 0],
+                            model.mesh.normals[i * 3 + 1],
+                            model.mesh.normals[i * 3 + 2],
+                        ],
                     }
                 }
             }).collect::<Vec<_>>();
