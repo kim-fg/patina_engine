@@ -6,6 +6,7 @@ mod model;
 mod resources;
 mod light;
 mod vertex;
+mod hdr;
 
 use camera::Projection;
 use light::LightUniform;
@@ -32,6 +33,7 @@ pub fn create_render_pipeline(
     color_format: wgpu::TextureFormat,
     depth_format: Option<wgpu::TextureFormat>,
     vertex_layouts: &[wgpu::VertexBufferLayout],
+    topology: wgpu::PrimitiveTopology,
     shader_module_descriptor: wgpu::ShaderModuleDescriptor,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(shader_module_descriptor);
@@ -59,7 +61,7 @@ pub fn create_render_pipeline(
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
+            topology,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: Some(wgpu::Face::Back),
@@ -113,6 +115,7 @@ struct State<'a> {
     light_bind_group: wgpu::BindGroup,
     light_render_pipeline: wgpu::RenderPipeline,
     mouse_pressed: bool,
+    hdr_pipeline: hdr::HdrPipeline,
 }
 
 impl<'a> State<'a> {
@@ -254,6 +257,8 @@ impl<'a> State<'a> {
             ],
         });
 
+        let hdr_pipeline = hdr::HdrPipeline::new(&device, &config);
+
         let light_uniform = LightUniform {
             position: [2.0, 2.0, 2.0],
             _padding: 0,
@@ -297,6 +302,29 @@ impl<'a> State<'a> {
             ],
         });
 
+        let light_render_pipeline = {
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("light_pipeline_layout"),
+                bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+            let shader_module_descriptor = wgpu::ShaderModuleDescriptor {
+                label: Some("light_shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
+            };
+
+            create_render_pipeline(
+                &device, 
+                &layout, 
+                hdr_pipeline.format(), 
+                Some(texture::Texture::DEPTH_FORMAT), 
+                &[model::ModelVertex::descriptor()],
+                wgpu::PrimitiveTopology::TriangleList,
+                shader_module_descriptor,
+            )
+        };
+
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("render_pipeline_layout"),
             bind_group_layouts: &[
@@ -318,31 +346,10 @@ impl<'a> State<'a> {
             create_render_pipeline(
                 &device,
                 &render_pipeline_layout,
-                config.format,
+                hdr_pipeline.format(),
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::descriptor(), instance::InstanceRaw::descriptor()],
-                shader_module_descriptor,
-            )
-        };
-
-        let light_render_pipeline = {
-            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("light_pipeline_layout"),
-                bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-            let shader_module_descriptor = wgpu::ShaderModuleDescriptor {
-                label: Some("light_shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
-            };
-
-            create_render_pipeline(
-                &device, 
-                &layout, 
-                config.format, 
-                Some(texture::Texture::DEPTH_FORMAT), 
-                &[model::ModelVertex::descriptor()], 
+                wgpu::PrimitiveTopology::TriangleList,
                 shader_module_descriptor,
             )
         };
@@ -410,6 +417,7 @@ impl<'a> State<'a> {
             light_bind_group,
             light_render_pipeline,
             mouse_pressed: false,
+            hdr_pipeline,
         }
     }
 
@@ -425,6 +433,7 @@ impl<'a> State<'a> {
             self.surface.configure(&self.device, &self.config);
             self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
             self.projection.resize(new_size.width, new_size.height);
+            self.hdr_pipeline.resize(&self.device, new_size.width, new_size.height);
         }
     }
 
@@ -477,7 +486,10 @@ impl<'a> State<'a> {
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.config.format.add_srgb_suffix()),
+            ..Default::default()
+        });
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("render_encoder"),
         });
@@ -485,7 +497,7 @@ impl<'a> State<'a> {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render_pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
+                view: self.hdr_pipeline.view(),
                 resolve_target: None,
                 ops: wgpu::Operations { 
                     load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -527,6 +539,8 @@ impl<'a> State<'a> {
         );
 
         drop(render_pass); //IMPORTANT: we have to release the borrow before we finish
+
+        self.hdr_pipeline.process(&mut encoder, &view);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
