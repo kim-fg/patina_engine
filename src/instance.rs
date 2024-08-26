@@ -1,14 +1,14 @@
-pub struct ModelInstance {
+pub struct Instance {
     pub position: cgmath::Vector3<f32>,
     pub rotation: cgmath::Quaternion<f32>,
 }
 
-impl ModelInstance {
-    pub fn to_raw(&self) -> ModelInstanceRaw {
+impl Instance {
+    pub fn to_raw(&self) -> InstanceRaw {
         let translation_matrix = cgmath::Matrix4::from_translation(self.position);
         let rotation_matrix = cgmath::Matrix4::from(self.rotation);
         
-        ModelInstanceRaw {
+        InstanceRaw {
             model: (translation_matrix * rotation_matrix).into()
         }
     }
@@ -16,15 +16,15 @@ impl ModelInstance {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ModelInstanceRaw {
+pub struct InstanceRaw {
     pub model: [[f32; 4]; 4],
 }
 
-impl ModelInstanceRaw {
+impl InstanceRaw {
     pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<ModelInstanceRaw>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
             // We need to switch from using a step mode of Vertex to Instance
             // This means that our shaders will only change to use the next
             // instance when the shader starts processing a new instance
