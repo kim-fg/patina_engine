@@ -6,7 +6,6 @@ mod model;
 mod resources;
 mod light;
 mod vertex;
-mod hdr;
 
 use camera::Projection;
 use light::LightUniform;
