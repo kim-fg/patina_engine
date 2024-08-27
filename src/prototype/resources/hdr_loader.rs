@@ -1,4 +1,4 @@
-use crate::texture;
+use crate::prototype::texture;
 
 pub struct HdrLoader {
     texture_format: wgpu::TextureFormat,

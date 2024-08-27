@@ -1,4 +1,4 @@
-use crate::vertex;
+use crate::prototype::vertex;
 
 pub struct Instance {
     pub position: cgmath::Vector3<f32>,

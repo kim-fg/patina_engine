@@ -1,5 +1,5 @@
-use patina_engine::run;
+use patina_engine::prototype;
 
 fn main() {
-    pollster::block_on(run());
+    prototype::run();
 }

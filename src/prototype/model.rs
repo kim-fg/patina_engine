@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::{texture, vertex};
+use crate::{prototype::texture, prototype::vertex};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

@@ -95,7 +95,7 @@ impl CameraUniform {
         
         let proj = projection.calculate_matrix();
         let view = camera.calculate_matrix();
-        let view_proj = (projection.calculate_matrix() * camera.calculate_matrix());
+        let view_proj = projection.calculate_matrix() * camera.calculate_matrix();
         
         self.view = view.into();
         self.view_proj = view_proj.into();

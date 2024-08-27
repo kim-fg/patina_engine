@@ -1,11 +1,10 @@
 use cgmath::{InnerSpace, Rad};
-use wgpu::DeviceType;
-use winit::{dpi::PhysicalPosition, event::{ElementState, KeyEvent, MouseScrollDelta, WindowEvent}, keyboard::{KeyCode, PhysicalKey}};
+use winit::{dpi::PhysicalPosition, event::{ElementState, MouseScrollDelta}, keyboard::KeyCode};
 use std::f32::consts::FRAC_PI_2;
 
 const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
-use crate::camera::Camera;
+use crate::prototype::camera::Camera;
 
 #[derive(Default)]
 pub struct CameraController {
