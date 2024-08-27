@@ -12,5 +12,5 @@ fn main() {
     
 
     let model_parent = model_transform.parent();
-    println!("{}", model_parent.is_some());
+    println!("{:?}", model_parent);
 }

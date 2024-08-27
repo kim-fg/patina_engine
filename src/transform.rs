@@ -15,7 +15,7 @@ impl Transform {
         self.parent.borrow().upgrade()
     }
 
-    pub fn set_parent(&mut self, parent: &Rc<Transform>) {
+    pub fn set_parent(&self, parent: &Rc<Transform>) {
         *self.parent.borrow_mut() = Rc::downgrade(parent);
     }
 
@@ -23,7 +23,7 @@ impl Transform {
         &self.children
     }
 
-    pub fn add_child(&mut self, child: &Rc<Transform>) {
+    pub fn add_child(&self, child: &Rc<Transform>) {
         //todo! set parent of child to self
 
         self.children.borrow_mut().push(child.clone())

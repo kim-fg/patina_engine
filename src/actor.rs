@@ -8,7 +8,7 @@ use crate::transform::Transform;
 pub struct Actor {
     pub name: String,
     uuid: Uuid,
-    transform: RefCell<Rc<Transform>>,
+    transform: Rc<Transform>,
 }
 
 impl Actor {
