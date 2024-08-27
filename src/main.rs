@@ -1,3 +1,5 @@
+use patina_engine::prototype;
+
 fn main() {
-    println!("Hello, world!");
+    prototype::run();
 }
