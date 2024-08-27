@@ -1,5 +1,6 @@
 use crate::prototype::*;
 use camera_controller::CameraController;
+use glam::{Quat, Vec3};
 use instance::Instance;
 use light::LightUniform;
 use model::{DrawLight, DrawModel, ModelVertex};
@@ -7,7 +8,6 @@ use model::{DrawLight, DrawModel, ModelVertex};
 use texture::Texture;
 use vertex::Vertex;
 use wgpu::util::DeviceExt;
-use cgmath::prelude::*;
 use winit::{
     event::*,
     event_loop::EventLoop,
@@ -140,8 +140,8 @@ impl<'a> State<'a> {
             ],
         });
 
-        let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
-        let projection = camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let camera = camera::Camera::new((0.0, 5.0, 10.0).into(), f32::to_radians(-90.0), f32::to_radians(-20.0));
+        let projection = camera::Projection::new(config.width, config.height, f32::to_radians(45.0), 0.1, 100.0);
         let camera_controller = CameraController::new(4.0, 0.4);
 
         let mut camera_uniform = camera::CameraUniform::new();
@@ -361,14 +361,14 @@ impl<'a> State<'a> {
                 let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
                 let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 
-                let position = cgmath::Vector3 { x, y: 0.0, z };
+                let position = Vec3 { x, y: 0.0, z };
 
-                let rotation = if position.is_zero() {
+                let rotation = if position.length() > f32::EPSILON {
                     // this is needed so an object at (0, 0, 0) won't get scaled to zero
                     // as Quaternions can affect scale if they're not created correctly
-                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                    Quat::from_axis_angle(Vec3::Z, f32::to_radians(0.0))
                 } else {
-                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                    Quat::from_axis_angle(position.normalize(), f32::to_radians(45.0))
                 };
 
                 Instance {
@@ -472,12 +472,9 @@ impl<'a> State<'a> {
         // Make sure that if you add new instances to the Vec, you recreate the instance_buffer as well as camera_bind_group. 
         // Otherwise, your new instances won't show up correctly.
 
-        let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
-        self.light_uniform.position = ( 
-            cgmath::Quaternion::from_axis_angle(
-                (0.0, 1.0, 0.0).into(), cgmath::Deg(60.0 * delta.as_secs_f32())
-            ) * old_position
-        ).into();
+        let old_position: Vec3 = self.light_uniform.position.into();
+        let new_position = glam::Quat::from_axis_angle((0.0, 1.0, 0.0).into(), 60.0f32.to_radians() * delta.as_secs_f32()) * old_position;
+        self.light_uniform.position = new_position.to_array();
 
         self.queue.write_buffer(&self.light_buffer, 0, bytemuck::cast_slice(&[self.light_uniform]));
 
