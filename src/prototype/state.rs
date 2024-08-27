@@ -141,8 +141,8 @@ impl<'a> State<'a> {
         });
 
         let camera = camera::Camera::new((0.0, 5.0, 10.0).into(), f32::to_radians(-90.0), f32::to_radians(-20.0));
-        let projection = camera::Projection::new(config.width, config.height, f32::to_radians(45.0), 0.1, 100.0);
-        let camera_controller = CameraController::new(4.0, 0.4);
+        let projection = camera::Projection::new(config.width, config.height, f32::to_radians(60.0), 0.1, 100.0);
+        let camera_controller = CameraController::new(4.0, 0.5);
 
         let mut camera_uniform = camera::CameraUniform::new();
         camera_uniform.update_view_proj(&camera, &projection);
@@ -364,11 +364,11 @@ impl<'a> State<'a> {
                 let position = Vec3 { x, y: 0.0, z };
 
                 let rotation = if position.length() > f32::EPSILON {
+                    Quat::from_axis_angle(position.normalize(), f32::to_radians(45.0))
+                } else {
                     // this is needed so an object at (0, 0, 0) won't get scaled to zero
                     // as Quaternions can affect scale if they're not created correctly
                     Quat::from_axis_angle(Vec3::Z, f32::to_radians(0.0))
-                } else {
-                    Quat::from_axis_angle(position.normalize(), f32::to_radians(45.0))
                 };
 
                 Instance {
