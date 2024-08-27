@@ -7,6 +7,7 @@ mod resources;
 mod light;
 mod vertex;
 mod hdr;
+mod rendering;
 
 use camera::Projection;
 use light::LightUniform;
@@ -26,68 +27,6 @@ use winit::{
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
-
-pub fn create_render_pipeline(
-    device: &wgpu::Device,
-    layout: &wgpu::PipelineLayout,
-    color_format: wgpu::TextureFormat,
-    depth_format: Option<wgpu::TextureFormat>,
-    vertex_layouts: &[wgpu::VertexBufferLayout],
-    topology: wgpu::PrimitiveTopology,
-    shader_module_descriptor: wgpu::ShaderModuleDescriptor,
-) -> wgpu::RenderPipeline {
-    let shader = device.create_shader_module(shader_module_descriptor);
-
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("render_pipeline"),
-        layout: Some(layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: "vs_main",
-            compilation_options: Default::default(),
-            buffers: vertex_layouts,
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: "fs_main",
-            targets: &[Some(wgpu::ColorTargetState { 
-                format: color_format, 
-                blend: Some(wgpu::BlendState {
-                    alpha: wgpu::BlendComponent::REPLACE,
-                    color: wgpu::BlendComponent::REPLACE,
-                }), 
-                write_mask: wgpu::ColorWrites::ALL 
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: wgpu::PrimitiveState {
-            topology,
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
-            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-            polygon_mode: wgpu::PolygonMode::Fill,
-            // Requires Features::DEPTH_CLIP_CONTROL
-            unclipped_depth: false,
-            // Requires Features::CONSERVATIVE_RASTERIZATION
-            conservative: false,
-        },
-        depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
-            format,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        multisample: wgpu::MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    })
-}
 
 struct State<'a> {
     surface: wgpu::Surface<'a>,
@@ -116,6 +55,8 @@ struct State<'a> {
     light_render_pipeline: wgpu::RenderPipeline,
     mouse_pressed: bool,
     hdr_pipeline: hdr::HdrPipeline,
+    environment_bind_group: wgpu::BindGroup,
+    sky_pipeline: wgpu::RenderPipeline,
 }
 
 impl<'a> State<'a> {
@@ -146,15 +87,9 @@ impl<'a> State<'a> {
         let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
                 required_features: wgpu::Features::empty(),
-                // WebGL doesn't support all of wgpu's features, so if
-                // we're building for the web, we'll have to disable some.
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
-                label: None,
+                required_limits: wgpu::Limits::downlevel_defaults(),
                 memory_hints: wgpu::MemoryHints::default(),
+                label: None,
             },
             None,
         ).await.unwrap();
@@ -314,7 +249,7 @@ impl<'a> State<'a> {
                 source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
             };
 
-            create_render_pipeline(
+            rendering::create_render_pipeline(
                 &device, 
                 &layout, 
                 hdr_pipeline.format(), 
@@ -343,7 +278,7 @@ impl<'a> State<'a> {
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()), 
             };
 
-            create_render_pipeline(
+            rendering::create_render_pipeline(
                 &device,
                 &render_pipeline_layout,
                 hdr_pipeline.format(),
@@ -393,6 +328,75 @@ impl<'a> State<'a> {
                 .await
                 .unwrap();
 
+        let hdr_loader = resources::HdrLoader::new(&device);
+        let sky_bytes = resources::load_binary("pure-sky.hdr").await?;
+        let sky_texture = hdr_loader.from_equirectangular_bytes(
+            &device,
+            &queue,
+            &sky_bytes,
+            1080,
+            Some("sky_texture"),
+        )?;
+
+        let environment_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("environment_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { 
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false }, 
+                        view_dimension: wgpu::TextureViewDimension::Cube, 
+                        multisampled: false, 
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty:wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+            ],
+        });
+
+        let environment_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("environment_bind_group"),
+            layout: &environment_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&sky_texture.view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler()),
+                }
+            ],
+        });
+
+        let sky_pipeline = {
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("sky_pipeline_layout"),
+                bind_group_layouts: &[
+                    &camera_bind_group_layout,
+                    &environment_layout,
+                ],
+                push_constant_ranges: &[],
+            });
+            let shader_module_descriptor = wgpu::include_wgsl!("sky.wgsl");
+
+            rendering::create_render_pipeline(
+                &device, 
+                &layout, 
+                hdr_pipeline.format(), 
+                Some(texture::Texture::DEPTH_FORMAT), 
+                &[], 
+                wgpu::PrimitiveTopology::TriangleList, 
+                shader_module_descriptor
+            )
+        };
+
         // todo! this is way too much data in one struct lol.. it needs to be split up majorly
         Self {
             window,
@@ -418,6 +422,8 @@ impl<'a> State<'a> {
             light_render_pipeline,
             mouse_pressed: false,
             hdr_pipeline,
+            environment_bind_group,
+            sky_pipeline,
         }
     }
 

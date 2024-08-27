@@ -1,3 +1,6 @@
+mod hdr_loader;
+pub use hdr_loader::HdrLoader; // re-export for easier access
+
 use std::io::{BufReader, Cursor};
 use cfg_if::cfg_if;
 use wgpu::util::DeviceExt;
