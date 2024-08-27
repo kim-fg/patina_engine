@@ -1,18 +1,19 @@
 use crate::prototype::vertex;
+use glam::{Mat3, Mat4, Quat, Vec3};
 
 pub struct Instance {
-    pub position: cgmath::Vector3<f32>,
-    pub rotation: cgmath::Quaternion<f32>,
+    pub position: Vec3,
+    pub rotation: Quat,
 }
 
 impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
-        let translation_matrix = cgmath::Matrix4::from_translation(self.position);
-        let rotation_matrix = cgmath::Matrix4::from(self.rotation);
+        let translation_matrix = Mat4::from_translation(self.position);
+        let rotation_matrix = Mat4::from_quat(self.rotation);
         
         InstanceRaw {
-            model: (translation_matrix * rotation_matrix).into(),
-            normal: cgmath::Matrix3::from(self.rotation).into(),
+            model: (translation_matrix * rotation_matrix).to_cols_array_2d(),
+            normal: Mat3::from_quat(self.rotation).to_cols_array_2d(),
         }
     }
 }

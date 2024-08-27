@@ -1,4 +1,5 @@
 mod hdr_loader;
+use glam::{Vec2, Vec3};
 pub use hdr_loader::HdrLoader; // re-export for easier access
 
 use std::io::{BufReader, Cursor};
@@ -138,13 +139,13 @@ pub async fn load_model(
                 let v1 = vertices[i1];
                 let v2 = vertices[i2];
 
-                let pos0: cgmath::Vector3<_> = v0.position.into();
-                let pos1: cgmath::Vector3<_> = v1.position.into();
-                let pos2: cgmath::Vector3<_> = v2.position.into();
+                let pos0: Vec3 = v0.position.into();
+                let pos1: Vec3 = v1.position.into();
+                let pos2: Vec3 = v2.position.into();
 
-                let uv0: cgmath::Vector2<_> = v0.tex_coords.into();
-                let uv1: cgmath::Vector2<_> = v1.tex_coords.into();
-                let uv2: cgmath::Vector2<_> = v2.tex_coords.into();
+                let uv0: Vec2 = v0.tex_coords.into();
+                let uv1: Vec2 = v1.tex_coords.into();
+                let uv2: Vec2 = v2.tex_coords.into();
 
                 // Calculate the edges of the triangle
                 let delta_pos1 = pos1 - pos0;
@@ -165,13 +166,13 @@ pub async fn load_model(
                 let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * -r;
 
                 // We'll use the same tangent/bitangent for each vertex in the triangle
-                vertices[i0].tangent = (tangent + cgmath::Vector3::from(vertices[i0].tangent)).into();
-                vertices[i1].tangent = (tangent + cgmath::Vector3::from(vertices[i1].tangent)).into();
-                vertices[i2].tangent = (tangent + cgmath::Vector3::from(vertices[i2].tangent)).into();
+                vertices[i0].tangent = (tangent + Vec3::from(vertices[i0].tangent)).into();
+                vertices[i1].tangent = (tangent + Vec3::from(vertices[i1].tangent)).into();
+                vertices[i2].tangent = (tangent + Vec3::from(vertices[i2].tangent)).into();
 
-                vertices[i0].bitangent = (bitangent + cgmath::Vector3::from(vertices[i0].bitangent)).into();
-                vertices[i1].bitangent = (bitangent + cgmath::Vector3::from(vertices[i1].bitangent)).into();
-                vertices[i2].bitangent = (bitangent + cgmath::Vector3::from(vertices[i2].bitangent)).into();
+                vertices[i0].bitangent = (bitangent + Vec3::from(vertices[i0].bitangent)).into();
+                vertices[i1].bitangent = (bitangent + Vec3::from(vertices[i1].bitangent)).into();
+                vertices[i2].bitangent = (bitangent + Vec3::from(vertices[i2].bitangent)).into();
 
                 // used to average the tangents/bitangents
                 triangles_included[i0] += 1;
@@ -182,8 +183,8 @@ pub async fn load_model(
             for (i, n) in triangles_included.into_iter().enumerate() {
                 let denom = 1.0 / n as f32;
                 let v = &mut vertices[i];
-                v.tangent = (cgmath::Vector3::from(v.tangent) * denom).into();
-                v.bitangent = (cgmath::Vector3::from(v.bitangent) * denom).into();
+                v.tangent = (Vec3::from(v.tangent) * denom).into();
+                v.bitangent = (Vec3::from(v.bitangent) * denom).into();
             }
                 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

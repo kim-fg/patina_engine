@@ -1,4 +1,4 @@
-use cgmath::{InnerSpace, Rad};
+use glam::Vec3;
 use winit::{dpi::PhysicalPosition, event::{ElementState, MouseScrollDelta}, keyboard::KeyCode};
 use std::f32::consts::FRAC_PI_2;
 
@@ -81,9 +81,9 @@ impl CameraController {
     pub fn update_camera(&mut self, camera: &mut Camera, delta: instant::Duration) {
         let delta = delta.as_secs_f32();
 
-        let (yaw_sin, yaw_cos) = camera.yaw.0.sin_cos();
-        let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+        let (yaw_sin, yaw_cos) = camera.yaw.sin_cos();
+        let forward = Vec3::new(yaw_cos, 0.0, yaw_sin).normalize();
+        let right = Vec3::new(-yaw_sin, 0.0, yaw_cos).normalize();
 
         camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * delta;
         camera.position += right * (self.amount_right - self.amount_left) * self.speed * delta;
@@ -92,8 +92,8 @@ impl CameraController {
         // Note: this isn't an actual zoom. The camera's position
         // changes when zooming. Makes it easier to get closer
         // to an object you want to focus on.
-        let (pitch_sin, pitch_cos) = camera.pitch.0.sin_cos();
-        let scrollward = cgmath::Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
+        let (pitch_sin, pitch_cos) = camera.pitch.sin_cos();
+        let scrollward = Vec3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
         camera.position += scrollward * self.scroll * self.speed * self.sensitivity * delta;
         self.scroll = 0.0;
 
@@ -102,8 +102,8 @@ impl CameraController {
         camera.position.y += (self.amount_up - self.amount_down) * self.speed * delta;
 
         // Rotate
-        camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * delta;
-        camera.pitch += Rad(-self.rotate_vertical) * self.sensitivity * delta;
+        camera.yaw += self.rotate_horizontal * self.sensitivity * delta;
+        camera.pitch += -self.rotate_vertical * self.sensitivity * delta;
 
         // If process_mouse isn't called every frame, these values
         // will not get set to zero, and the camera will rotate
@@ -112,10 +112,10 @@ impl CameraController {
         self.rotate_vertical = 0.0;
 
         // Keep the camera's angle from going too high/low
-        if camera.pitch < -Rad(SAFE_FRAC_PI_2) {
-            camera.pitch = -Rad(SAFE_FRAC_PI_2);
-        } else if camera.pitch > Rad(SAFE_FRAC_PI_2) {
-            camera.pitch = Rad(SAFE_FRAC_PI_2);
+        if camera.pitch < -SAFE_FRAC_PI_2 {
+            camera.pitch = -SAFE_FRAC_PI_2;
+        } else if camera.pitch > SAFE_FRAC_PI_2 {
+            camera.pitch = SAFE_FRAC_PI_2;
         }
     }
 }
