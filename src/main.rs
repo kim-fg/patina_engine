@@ -7,10 +7,10 @@ fn main() {
     
     let player_model = Actor::new("Model");
     let model_transform = player_model.transform();
-    model_transform.borrow_mut().set_parent(Some(player.transform()));
-    player_transform.borrow_mut().add_child(model_transform.clone());
+    model_transform.set_parent(&player.transform());
+    player_transform.add_child(&model_transform);
     
 
-    let model_parent = model_transform.borrow().parent();
-    println!("{:?}", model_parent);
+    let model_parent = model_transform.parent();
+    println!("{}", model_parent.is_some());
 }

@@ -8,7 +8,7 @@ use crate::transform::Transform;
 pub struct Actor {
     pub name: String,
     uuid: Uuid,
-    transform: Rc<RefCell<Transform>>,
+    transform: RefCell<Rc<Transform>>,
 }
 
 impl Actor {
@@ -16,13 +16,14 @@ impl Actor {
         Self {
             name: name.to_string(),
             uuid: Uuid::new_v4(),
-            transform: Rc::new(RefCell::new(Transform::default())),
+            transform: Rc::new(Transform::default()),
         }
     }
 
     // Getters
     pub fn uuid(&self) -> Uuid { self.uuid }
-    pub fn transform(&self) -> Rc<RefCell<Transform>> { self.transform.clone() }
+    //todo! issue here is returning an Rc makes it immutable..
+    pub fn transform(&self) -> Rc<Transform> { self.transform.clone() }
 }
 
 impl fmt::Display for Actor {
