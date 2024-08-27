@@ -1,5 +1,5 @@
 use wgpu::Operations;
-use crate::{create_render_pipeline, texture};
+use crate::{rendering::create_render_pipeline, texture};
 
 pub struct HdrPipeline {
     pipeline: wgpu::RenderPipeline,
@@ -84,7 +84,8 @@ pub struct HdrPipeline {
             // the shader, so we don't need any vertex buffers
             &[], 
             wgpu::PrimitiveTopology::TriangleList,
-            shader_module_descriptor
+            shader_module_descriptor,
+            Some("hdr_pipeline"),
         );
 
         Self {

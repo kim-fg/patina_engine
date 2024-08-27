@@ -69,7 +69,7 @@ impl HdrLoader {
         label: Option<&str>,
     ) -> anyhow::Result<texture::CubeTexture> {
         //todo! figure out where HdrDecoder comes from
-        let hdr_decoder = HdrDecoder::new(Cursor::new(data))?;
+        let hdr_decoder = image::codecs::hdr::HdrDecoder::new(std::io::Cursor::new(data))?;
         let meta = hdr_decoder.metadata();
 
         #[cfg(not(target_arch="wasm32"))]

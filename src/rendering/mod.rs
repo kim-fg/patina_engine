@@ -6,11 +6,12 @@ pub fn create_render_pipeline(
     vertex_layouts: &[wgpu::VertexBufferLayout],
     topology: wgpu::PrimitiveTopology,
     shader_module_descriptor: wgpu::ShaderModuleDescriptor,
+    label: Option<&str>,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(shader_module_descriptor);
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("render_pipeline"),
+        label,
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: &shader,

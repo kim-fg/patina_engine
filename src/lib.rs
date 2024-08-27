@@ -106,7 +106,7 @@ impl<'a> State<'a> {
             height: size.height,
             present_mode: surface_capabilities.present_modes[0],
             alpha_mode: surface_capabilities.alpha_modes[0],
-            view_formats: vec![],
+            view_formats: vec![surface_format.add_srgb_suffix()],
             desired_maximum_frame_latency: 2,
         };
 
@@ -240,7 +240,9 @@ impl<'a> State<'a> {
         let light_render_pipeline = {
             let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("light_pipeline_layout"),
-                bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
+                bind_group_layouts: &[
+                    &camera_bind_group_layout, 
+                    &light_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -257,6 +259,77 @@ impl<'a> State<'a> {
                 &[model::ModelVertex::descriptor()],
                 wgpu::PrimitiveTopology::TriangleList,
                 shader_module_descriptor,
+                Some("light_render_pipeline"),
+            )
+        };
+
+        let hdr_loader = resources::HdrLoader::new(&device);
+        let sky_bytes = resources::load_binary("hdr/pure-sky.hdr").await.unwrap();
+        let sky_texture = hdr_loader.from_equirectangular_bytes(
+            &device,
+            &queue,
+            &sky_bytes,
+            1080,
+            Some("sky_texture"),
+        ).unwrap();
+
+        let environment_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("environment_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { 
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false }, 
+                        view_dimension: wgpu::TextureViewDimension::Cube, 
+                        multisampled: false, 
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty:wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+            ],
+        });
+
+        let environment_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("environment_bind_group"),
+            layout: &environment_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&sky_texture.view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler()),
+                }
+            ],
+        });
+
+        let sky_pipeline = {
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("sky_pipeline_layout"),
+                bind_group_layouts: &[
+                    &camera_bind_group_layout,
+                    &environment_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
+            let shader_module_descriptor = wgpu::include_wgsl!("sky.wgsl");
+
+            rendering::create_render_pipeline(
+                &device, 
+                &layout, 
+                hdr_pipeline.format(), 
+                Some(texture::Texture::DEPTH_FORMAT), 
+                &[], 
+                wgpu::PrimitiveTopology::TriangleList, 
+                shader_module_descriptor,
+                Some("sky_render_pipeline"),
             )
         };
 
@@ -266,6 +339,7 @@ impl<'a> State<'a> {
                 &texture_bind_group_layout,
                 &camera_bind_group_layout,
                 &light_bind_group_layout,
+                &environment_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
@@ -286,6 +360,7 @@ impl<'a> State<'a> {
                 &[model::ModelVertex::descriptor(), instance::InstanceRaw::descriptor()],
                 wgpu::PrimitiveTopology::TriangleList,
                 shader_module_descriptor,
+                Some("default_render_pipeline"),
             )
         };
 
@@ -327,75 +402,6 @@ impl<'a> State<'a> {
             resources::load_model("cube.obj", &device, &queue, &texture_bind_group_layout)
                 .await
                 .unwrap();
-
-        let hdr_loader = resources::HdrLoader::new(&device);
-        let sky_bytes = resources::load_binary("pure-sky.hdr").await?;
-        let sky_texture = hdr_loader.from_equirectangular_bytes(
-            &device,
-            &queue,
-            &sky_bytes,
-            1080,
-            Some("sky_texture"),
-        )?;
-
-        let environment_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("environment_layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture { 
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false }, 
-                        view_dimension: wgpu::TextureViewDimension::Cube, 
-                        multisampled: false, 
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty:wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
-                    count: None,
-                },
-            ],
-        });
-
-        let environment_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("environment_bind_group"),
-            layout: &environment_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&sky_texture.view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler()),
-                }
-            ],
-        });
-
-        let sky_pipeline = {
-            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("sky_pipeline_layout"),
-                bind_group_layouts: &[
-                    &camera_bind_group_layout,
-                    &environment_layout,
-                ],
-                push_constant_ranges: &[],
-            });
-            let shader_module_descriptor = wgpu::include_wgsl!("sky.wgsl");
-
-            rendering::create_render_pipeline(
-                &device, 
-                &layout, 
-                hdr_pipeline.format(), 
-                Some(texture::Texture::DEPTH_FORMAT), 
-                &[], 
-                wgpu::PrimitiveTopology::TriangleList, 
-                shader_module_descriptor
-            )
-        };
 
         // todo! this is way too much data in one struct lol.. it needs to be split up majorly
         Self {
@@ -541,8 +547,14 @@ impl<'a> State<'a> {
             &self.obj_model,  
             0..self.instances.len() as u32, 
             &self.camera_bind_group, 
-            &self.light_bind_group
+            &self.light_bind_group,
+            &self.environment_bind_group,
         );
+
+        render_pass.set_pipeline(&self.sky_pipeline);
+        render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.environment_bind_group, &[]);
+        render_pass.draw(0..3, 0..1);
 
         drop(render_pass); //IMPORTANT: we have to release the borrow before we finish
 

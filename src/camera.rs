@@ -1,13 +1,4 @@
-use cgmath::InnerSpace;
-
-// required since cgmath is built for OpenGL's coordinate system
-#[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.5,
-    0.0, 0.0, 0.0, 1.0,
-);
+use cgmath::{InnerSpace, Matrix, SquareMatrix};
 
 pub struct Camera {
     pub position: cgmath::Point3<f32>,
@@ -72,18 +63,19 @@ pub struct Projection {
     }
 
     pub fn calculate_matrix(&self) -> cgmath::Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * cgmath::perspective(self.fovy, self.aspect, self.near, self.far)
+        cgmath::perspective(self.fovy, self.aspect, self.near, self.far)
     }
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
-     // We're using Vector4 because of the uniforms 16 byte spacing requirement
+    // We're using Vector4 because of the uniforms 16 byte spacing requirement
     pub view_position: [f32; 4],
-    // We can't use cgmath with bytemuck directly, so we'll have
-    // to convert the Matrix4 into a 4x4 f32 array
+    pub view: [[f32; 4]; 4],
     pub view_proj: [[f32; 4]; 4],
+    pub inv_view: [[f32; 4]; 4],
+    pub inv_proj: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
@@ -91,12 +83,23 @@ impl CameraUniform {
         use cgmath::SquareMatrix;
         Self {
             view_position: [0.0; 4],
+            view: cgmath::Matrix4::identity().into(),
             view_proj: cgmath::Matrix4::identity().into(),
+            inv_view: cgmath::Matrix4::identity().into(),
+            inv_proj: cgmath::Matrix4::identity().into(),
         }
     }
 
     pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
         self.view_position = camera.position.to_homogeneous().into();
-        self.view_proj = (projection.calculate_matrix() * camera.calculate_matrix()).into();
+        
+        let proj = projection.calculate_matrix();
+        let view = camera.calculate_matrix();
+        let view_proj = (projection.calculate_matrix() * camera.calculate_matrix());
+        
+        self.view = view.into();
+        self.view_proj = view_proj.into();
+        self.inv_view = view.transpose().into();
+        self.inv_proj = proj.invert().unwrap().into();
     }
 }
