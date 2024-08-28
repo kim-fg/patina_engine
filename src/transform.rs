@@ -1,6 +1,8 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 use glam::{Quat, Vec3};
 
+use crate::component::Behavior;
+
 #[derive(Debug, Default)]
 pub struct Transform {
     pub position: Vec3,
@@ -28,4 +30,11 @@ impl Transform {
 
         self.children.borrow_mut().push(child.clone())
     }
+}
+
+impl Behavior for Transform {
+    fn init(&self) { }
+    fn start(&self) { }
+    fn update(&self) { }
+    fn destroy(&self) { }
 }

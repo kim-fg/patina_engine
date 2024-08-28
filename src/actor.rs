@@ -1,14 +1,14 @@
 use core::fmt;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, hash::Hash, path::Component, rc::Rc};
 use uuid::Uuid;
 
 use crate::transform::Transform;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Actor {
     pub name: String,
     uuid: Uuid,
-    transform: Rc<Transform>,
+    components: RefCell<HashSet<Rc<Component>>>,
 }
 
 impl Actor {
@@ -16,7 +16,7 @@ impl Actor {
         Self {
             name: name.to_string(),
             uuid: Uuid::new_v4(),
-            transform: Rc::new(Transform::default()),
+            ..Default::default()
         }
     }
 
