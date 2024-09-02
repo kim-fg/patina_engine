@@ -3,7 +3,7 @@ use glam::{Quat, Vec3};
 
 use crate::component::Behavior;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Transform {
     pub position: Vec3,
     pub rotation: Quat,
@@ -32,9 +32,18 @@ impl Transform {
     }
 }
 
+impl Default for Transform {
+    fn default() -> Self {
+        Self { 
+            position: Default::default(), 
+            rotation: glam::Quat::IDENTITY, 
+            scale: glam::Vec3::ONE, 
+            parent: Default::default(), 
+            children: Default::default() 
+        }
+    }
+}
+
 impl Behavior for Transform {
-    fn init(&self) { }
-    fn start(&self) { }
-    fn update(&self) { }
-    fn destroy(&self) { }
+    fn typeid() -> &str<'static> where Self: Sized { "transform" }
 }
